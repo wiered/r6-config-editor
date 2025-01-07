@@ -1,10 +1,10 @@
 ﻿import os
 
 import customtkinter
-import tkinter
 
 from r6config import get_configs, get_player_config, PlayerConfig
 
+VERSION = "1.0"
 R6_PATH = os.path.expanduser("~/documents/My Games/Rainbow Six - Siege")
 
 class ConfigDropdownFrame(customtkinter.CTkFrame):
@@ -236,7 +236,7 @@ class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("R6S Config Editor")
+        self.title("R6S Config Editor" + " " + VERSION)
         self.geometry("400x730")
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)

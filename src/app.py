@@ -238,7 +238,10 @@ class App(customtkinter.CTk):
 
         self.title("R6S Config Editor" + " " + VERSION)
         self.geometry("400x730")
-        self.iconbitmap("assets/ico.ico")
+
+        # chech if assets/ico.ico exists
+        if os.path.exists("assets/ico.ico"):
+            self.iconbitmap("assets/ico.ico")
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 

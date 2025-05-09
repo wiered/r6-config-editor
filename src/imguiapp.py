@@ -1,4 +1,5 @@
 ﻿import os
+import sys
 
 import imgui
 from imgui.integrations.pyglet import PygletRenderer
@@ -9,6 +10,17 @@ from r6config import get_configs, get_player_config, PlayerConfig
 
 VERSION = "2.0"
 R6_PATH = os.path.expanduser("~/Documents/My Games/Rainbow Six - Siege")
+
+
+def resource_path(relative_path):
+    """
+    Get absolute path to resource, works for dev and for PyInstaller.
+    """
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(__file__)
+    return os.path.join(base_path, relative_path)
 
 
 class R6SConfigEditor:
@@ -63,47 +75,65 @@ class R6SConfigEditor:
     }
 
     def __init__(self):
-        # --- Initialize window & ImGui ---
+        # Initialize ImGui and window
         imgui.create_context()
         self.window = pyglet.window.Window(
             width=800, height=750,
             caption=f"R6S Config Editor {VERSION}",
             resizable=True
         )
+        # Load icon (works both in dev and PyInstaller)
+        try:
+            icon_file = resource_path(os.path.join('assets', 'ico.ico'))
+            icon = pyglet.image.load(icon_file)
+            self.window.set_icon(icon)
+        except Exception:
+            pass
+
+        # Renderer and loop
         self.impl = PygletRenderer(self.window)
         pyglet.clock.schedule_interval(self._update, 1/60.0)
 
-        # --- State ---
+        # Detect profiles
         self.player_ids = get_configs()
-        if not self.player_ids:
-            def draw_no_profiles():
-                imgui.open_popup("Error")
-                if imgui.begin_popup_modal("Error")[0]:
-                    imgui.text("No Rainbow Six profiles found.")
+        self.no_configs = not bool(self.player_ids)
+
+        # If configs exist, prepare data
+        if not self.no_configs:
+            self.primary_index = 0
+            self.secondary_index = 0
+            self.show_all = False
+            self.show_second = False
+            self.primary_settings = self._make_empty_store()
+            self.secondary_settings = self._make_empty_store()
+            self._load(self.primary_index, self.primary_settings, all_keys=True)
+            self._load(self.secondary_index, self.secondary_settings, all_keys=False)
+
+        # Event handlers
+        @self.window.event
+        def on_draw():
+            glClearColor(0.1, 0.1, 0.1, 1)
+            self.window.clear()
+            imgui.new_frame()
+
+            if self.no_configs:
+                imgui.open_popup("NoConfigs")
+                if imgui.begin_popup_modal("NoConfigs", flags=imgui.WINDOW_ALWAYS_AUTO_RESIZE)[0]:
+                    imgui.text("No configs found.")
                     imgui.separator()
                     if imgui.button("Exit"):
                         pyglet.app.exit()
                     imgui.end_popup()
-            pyglet.clock.schedule_once(lambda dt: draw_no_profiles(), 0.1)
-            return
+            else:
+                self._draw_main_panel()
+                self._draw_primary_important()
+                if self.show_all:
+                    self._draw_primary_all()
+                if self.show_second:
+                    self._draw_secondary()
 
-        self.primary_index = 0
-        self.secondary_index = 0
-        self.show_all = False
-        self.show_second = False
-
-        # flat storage for settings
-        self.primary_settings = self._make_empty_store()
-        self.secondary_settings = self._make_empty_store()
-
-        # load initial
-        self._load(self.primary_index, self.primary_settings, all_keys=True)
-        self._load(self.secondary_index, self.secondary_settings, all_keys=False)
-
-        # event handlers
-        @self.window.event
-        def on_draw():
-            self.render()
+            imgui.render()
+            self.impl.render(imgui.get_draw_data())
 
         @self.window.event
         def on_close():
@@ -113,7 +143,6 @@ class R6SConfigEditor:
         pyglet.app.run()
 
     def _make_empty_store(self):
-        """Create a flat dict with all known keys initialized to empty str."""
         store = {}
         for cats in (self.IMPORTANT_CATEGORIES, self.ALL_CATEGORIES):
             for keys in cats.values():
@@ -122,34 +151,28 @@ class R6SConfigEditor:
         return store
 
     def _load(self, player_index, store, *, all_keys: bool):
-        """Load either important only or all settings into store."""
         player_id = self.player_ids[player_index]
         cfg = get_player_config(player_id)
-        # always load important first
         for section, keys in self.IMPORTANT_CATEGORIES.items():
             for key in keys:
                 store[key] = self._safe_get(cfg, section, key)
         if all_keys:
-            # load the rest
             for section, keys in self.ALL_CATEGORIES.items():
                 for key in keys:
                     store[key] = self._safe_get(cfg, section, key)
 
     def _safe_get(self, cfg, section, key):
-        """Try get_setting, fall back to get_int as str."""
         try:
             return cfg.get_setting(section, key)
         except Exception:
             return str(cfg.get_int(section, key))
 
     def _save(self, player_index, store, *, all_keys: bool):
-        """Save either important only or all settings from store."""
         path = os.path.join(R6_PATH, self.player_ids[player_index], "GameSettings.ini")
         cfg = PlayerConfig(path)
         cats_to_save = [self.IMPORTANT_CATEGORIES]
         if all_keys:
             cats_to_save.append(self.ALL_CATEGORIES)
-
         for cats in cats_to_save:
             for section, keys in cats.items():
                 for key in keys:
@@ -157,40 +180,20 @@ class R6SConfigEditor:
         cfg.save()
 
     def _update(self, dt):
-        pass  # nothing for now
-
-    def render(self):
-        glClearColor(0.1, 0.1, 0.1, 1)
-        self.window.clear()
-        imgui.new_frame()
-
-        self._draw_main_panel()
-        self._draw_primary_important()
-        if self.show_all:
-            self._draw_primary_all()
-        if self.show_second:
-            self._draw_secondary()
-
-        imgui.render()
-        self.impl.render(imgui.get_draw_data())
-
-    # --- UI Panels ---
+        pass
 
     def _draw_main_panel(self):
         imgui.set_next_window_position(10, 10, imgui.ONCE)
         imgui.set_next_window_size(300, 140, imgui.ONCE)
         imgui.begin("Config")
-
         imgui.text("Primary Profile:")
         changed, self.primary_index = imgui.combo(
             "##primary_combo", self.primary_index, self.player_ids
         )
         if changed:
             self._load(self.primary_index, self.primary_settings, all_keys=True)
-
         if imgui.button("Save Primary", width=120):
             self._save(self.primary_index, self.primary_settings, all_keys=self.show_all)
-
         imgui.separator()
         _, self.show_all = imgui.checkbox("Show All Settings", self.show_all)
         _, self.show_second = imgui.checkbox("Show Second Config", self.show_second)

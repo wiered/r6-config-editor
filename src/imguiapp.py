@@ -75,6 +75,18 @@ class R6SConfigEditor:
 
         # --- State ---
         self.player_ids = get_configs()
+        if not self.player_ids:
+            def draw_no_profiles():
+                imgui.open_popup("Error")
+                if imgui.begin_popup_modal("Error")[0]:
+                    imgui.text("No Rainbow Six profiles found.")
+                    imgui.separator()
+                    if imgui.button("Exit"):
+                        pyglet.app.exit()
+                    imgui.end_popup()
+            pyglet.clock.schedule_once(lambda dt: draw_no_profiles(), 0.1)
+            return
+
         self.primary_index = 0
         self.secondary_index = 0
         self.show_all = False
